@@ -1,21 +1,24 @@
 import logging
-from telegram import ReplyKeyboardMarkup, ReplyKeyboardRemove
+from telegram import ReplyKeyboardMarkup, ReplyKeyboardRemove, Bot
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, ConversationHandler
-from  config import TOKEN, sys_admins
+from config import TOKEN, sys_admins
 
-logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 
-# Определение стадий диалога
 SELECTING_ADDRESS, ENTER_ROOM, ENTER_MESSAGE, ENTER_NAME = range(4)
+
+bot = Bot(token=TOKEN)
 
 
 # Начальная функция диалога
-def start(update, context):
-    reply_keyboard = [['Адрес 1', 'Адрес 2', 'Адрес 3'],
-                      ['Адрес 4', 'Адрес 5', 'Адрес 6']]
+def start(update):
+    reply_keyboard = [["Мелик-Карамова 4/1", "Рабочая 43", "Крылова.д 41/1"],
+                      ["50 ЛетВЛКСМ", "Кукуевицкого 2", "Дзержинского 6/1"]]
     update.message.reply_text(
         "Привет, выберите адрес:",
-        reply_markup=ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=True),
+        reply_markup=ReplyKeyboardMarkup(
+            reply_keyboard, one_time_keyboard=True),
     )
 
     return SELECTING_ADDRESS
@@ -23,25 +26,24 @@ def start(update, context):
 
 # Функция для обработки выбора адреса
 def select_address(update, context):
-    user = update.message.from_user
     context.user_data['address'] = update.message.text
-    update.message.reply_text(f"Вы выбрали адрес: {context.user_data['address']}. Введите кабинет:")
+    update.message.reply_text(
+        f"Вы выбрали адрес: {context.user_data['address']}. Введите кабинет:")
 
     return ENTER_ROOM
 
 
 # Функция для обработки ввода номера кабинета
 def enter_room(update, context):
-    user = update.message.from_user
     context.user_data['room'] = update.message.text
-    update.message.reply_text("Введите сообщение:")
+    update.message.reply_text("Введите сообщение:",
+                              reply_markup=ReplyKeyboardRemove())
 
     return ENTER_MESSAGE
 
 
 # Функция для обработки ввода сообщения
 def enter_message(update, context):
-    user = update.message.from_user
     context.user_data['message'] = update.message.text
     update.message.reply_text("Введите ваше имя:")
 
@@ -50,27 +52,36 @@ def enter_message(update, context):
 
 # Функция для обработки ввода имени и завершения диалога
 def enter_name(update, context):
-    user = update.message.from_user
     context.user_data['name'] = update.message.text
     # Здесь вы можете использовать context.user_data для доступа ко всем данным пользователя, собранным в ходе диалога
-    print(context.user_data['address'], context.user_data['room'], context.user_data['message'], context.user_data['name'])
+    last_message = ("От:  " + context.user_data['name'] + "\n",
+                    "По адресу: " + context.user_data['address'] + "\n",
+                    "В кабинете: " + context.user_data['room'] + "\n",
+                    "Сообщение: " + context.user_data['message'],)
 
-    # Завершаем диалог
-    update.message.reply_text("Спасибо! Ваша информация принята.", reply_markup=ReplyKeyboardRemove())
+    send_to_sys_admins(last_message)
+
+    update.message.reply_text("Спасибо! Ваша информация принята.")
 
     return ConversationHandler.END
 
 
 # Функция для отмены диалога
-def cancel(update, context):
-    user = update.message.from_user
-    update.message.reply_text("Диалог отменен.", reply_markup=ReplyKeyboardRemove())
-
+def cancel(update):
+    update.message.reply_text(
+        "Диалог отменен.", reply_markup=ReplyKeyboardRemove())
     return ConversationHandler.END
 
 
+def send_to_sys_admins(message):
+    for admin_id in sys_admins:
+        try:
+            bot.sendMessage(text=''.join(message), chat_id=admin_id)
+        except:
+            print("Cant send message to sys_admin id:" + str(admin_id))
+
+
 def main():
-    # Замените 'YOUR_BOT_TOKEN' на токен вашего бота
     updater = Updater(token=TOKEN, use_context=True)
     dispatcher = updater.dispatcher
 
@@ -79,7 +90,8 @@ def main():
         entry_points=[CommandHandler('start', start)],
         states={
             SELECTING_ADDRESS: [
-                MessageHandler(Filters.regex('^(Адрес 1|Адрес 2|Адрес 3|Адрес 4|Адрес 5|Адрес 6)$'), select_address)],
+                MessageHandler(Filters.regex('^(Мелик-Карамова 4/1|Рабочая 43|Крылова.д 41/1|50 ЛетВЛКСМ|Кукуевицкого '
+                                             '2|Дзержинского 6/1)$'), select_address)],
             ENTER_ROOM: [MessageHandler(Filters.text, enter_room)],
             ENTER_MESSAGE: [MessageHandler(Filters.text, enter_message)],
             ENTER_NAME: [MessageHandler(Filters.text, enter_name)],
