@@ -12,7 +12,7 @@ bot = Bot(token=TOKEN)
 
 
 # Начальная функция диалога
-def start(update):
+def start(update, context):
     reply_keyboard = [["Мелик-Карамова 4/1", "Рабочая 43", "Крылова.д 41/1"],
                       ["50 ЛетВЛКСМ", "Кукуевицкого 2", "Дзержинского 6/1"]]
     update.message.reply_text(
@@ -28,7 +28,7 @@ def start(update):
 def select_address(update, context):
     context.user_data['address'] = update.message.text
     update.message.reply_text(
-        f"Вы выбрали адрес: {context.user_data['address']}. Введите кабинет:")
+        f"Вы выбрали адрес: {context.user_data['address']}. Введите кабинет:", reply_markup=ReplyKeyboardRemove())
 
     return ENTER_ROOM
 
@@ -36,8 +36,7 @@ def select_address(update, context):
 # Функция для обработки ввода номера кабинета
 def enter_room(update, context):
     context.user_data['room'] = update.message.text
-    update.message.reply_text("Введите сообщение:",
-                              reply_markup=ReplyKeyboardRemove())
+    update.message.reply_text("Введите сообщение:")
 
     return ENTER_MESSAGE
 
@@ -54,10 +53,10 @@ def enter_message(update, context):
 def enter_name(update, context):
     context.user_data['name'] = update.message.text
     # Здесь вы можете использовать context.user_data для доступа ко всем данным пользователя, собранным в ходе диалога
-    last_message = ("От:  " + context.user_data['name'] + "\n",
-                    "По адресу: " + context.user_data['address'] + "\n",
-                    "В кабинете: " + context.user_data['room'] + "\n",
-                    "Сообщение: " + context.user_data['message'],)
+    last_message = "От:  " + context.user_data['name'] + "\n" + \
+                    "По адресу: " + context.user_data['address'] + "\n" + \
+                    "В кабинете: " + context.user_data['room'] + "\n" + \
+                    "Сообщение: " + context.user_data['message']
 
     send_to_sys_admins(last_message)
 
@@ -67,7 +66,7 @@ def enter_name(update, context):
 
 
 # Функция для отмены диалога
-def cancel(update):
+def cancel(update, context):
     update.message.reply_text(
         "Диалог отменен.", reply_markup=ReplyKeyboardRemove())
     return ConversationHandler.END
@@ -76,7 +75,7 @@ def cancel(update):
 def send_to_sys_admins(message):
     for admin_id in sys_admins:
         try:
-            bot.sendMessage(text=''.join(message), chat_id=admin_id)
+            bot.sendMessage(text=message, chat_id=admin_id)
         except:
             print("Cant send message to sys_admin id:" + str(admin_id))
 
@@ -92,11 +91,11 @@ def main():
             SELECTING_ADDRESS: [
                 MessageHandler(Filters.regex('^(Мелик-Карамова 4/1|Рабочая 43|Крылова.д 41/1|50 ЛетВЛКСМ|Кукуевицкого '
                                              '2|Дзержинского 6/1)$'), select_address)],
-            ENTER_ROOM: [MessageHandler(Filters.text, enter_room)],
-            ENTER_MESSAGE: [MessageHandler(Filters.text, enter_message)],
-            ENTER_NAME: [MessageHandler(Filters.text, enter_name)],
+            ENTER_ROOM: [MessageHandler(Filters.text & (~ Filters.command), enter_room)],
+            ENTER_MESSAGE: [MessageHandler(Filters.text & (~ Filters.command), enter_message)],
+            ENTER_NAME: [MessageHandler(Filters.text & (~ Filters.command), enter_name)],
         },
-        fallbacks=[MessageHandler(Filters.regex('^Отмена$'), cancel)]
+        fallbacks=[CommandHandler('cancel', cancel)]
     )
 
     dispatcher.add_handler(conv_handler)
