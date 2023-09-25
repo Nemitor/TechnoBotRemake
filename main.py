@@ -1,6 +1,8 @@
 import logging
-from telegram import ReplyKeyboardMarkup, ReplyKeyboardRemove, Bot
-from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, ConversationHandler
+from telegram import ReplyKeyboardMarkup, ReplyKeyboardRemove, Bot, Update
+from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, ConversationHandler, CallbackContext
+
+from Sheets import set_new_sheet_data
 from config import TOKEN, sys_admins
 
 logging.basicConfig(
@@ -12,7 +14,8 @@ bot = Bot(token=TOKEN)
 
 
 # Начальная функция диалога
-def start(update, context):
+def start(update: Update, context: CallbackContext):
+    context.user_data['telegram_id'] = update.message.from_user.id
     reply_keyboard = [["Мелик-Карамова 4/1", "Рабочая 43", "Крылова.д 41/1"],
                       ["50 ЛетВЛКСМ", "Кукуевицкого 2", "Дзержинского 6/1"]]
     update.message.reply_text(
@@ -52,11 +55,12 @@ def enter_message(update, context):
 # Функция для обработки ввода имени и завершения диалога
 def enter_name(update, context):
     context.user_data['name'] = update.message.text
+    set_new_sheet_data(context.user_data)
     # Здесь вы можете использовать context.user_data для доступа ко всем данным пользователя, собранным в ходе диалога
     last_message = "От:  " + context.user_data['name'] + "\n" + \
-                    "По адресу: " + context.user_data['address'] + "\n" + \
-                    "В кабинете: " + context.user_data['room'] + "\n" + \
-                    "Сообщение: " + context.user_data['message']
+                   "По адресу: " + context.user_data['address'] + "\n" + \
+                   "В кабинете: " + context.user_data['room'] + "\n" + \
+                   "Сообщение: " + context.user_data['message']
 
     send_to_sys_admins(last_message)
 
