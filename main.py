@@ -1,5 +1,6 @@
 import logging
 import os
+import sys
 
 from dotenv import load_dotenv
 from telegram import Bot, ReplyKeyboardMarkup, Update, ReplyKeyboardRemove
@@ -8,10 +9,14 @@ from telegram.ext import Updater, CallbackContext, ConversationHandler, CommandH
 SELECTING_ADDRESS, ENTER_ROOM, ENTER_MESSAGE, ENTER_NAME = range(4)
 
 load_dotenv()
+try:
+    TOKEN = os.getenv("TOKEN")
+    sys_admins = os.getenv("sys_admins").split(',')
+except:
+    print(".env is not detected in root folder")
+    sys.exit(0)
 
-TOKEN = os.getenv("TOKEN")
 bot = Bot(token=TOKEN)
-sys_admins = os.getenv("sys_admins").split(',')
 
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
