@@ -69,7 +69,7 @@ def processing_user_request(update, context):
                    "В кабинете: " + context.user_data['room'] + "\n" + \
                    "Сообщение: " + context.user_data['message']
 
-    send_to_sys_admins(bot, last_message, sys_admins)
+    send_to_sys_admins(bot, last_message)
     return ConversationHandler.END
 
 
@@ -79,7 +79,7 @@ def cancel(update, context):
     return ConversationHandler.END
 
 
-def send_to_sys_admins(bot: Bot, message: str, sys_admins):
+def send_to_sys_admins(bot: Bot, message: str):
     for admin_id in sys_admins:
         try:
             bot.sendMessage(text=message, chat_id=admin_id)
