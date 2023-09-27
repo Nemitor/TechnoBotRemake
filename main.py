@@ -6,6 +6,8 @@ from dotenv import load_dotenv
 from telegram import Bot, ReplyKeyboardMarkup, Update, ReplyKeyboardRemove
 from telegram.ext import Updater, CallbackContext, ConversationHandler, CommandHandler, MessageHandler, Filters
 
+from sql_data import get_txt_requests
+
 SELECTING_ADDRESS, ENTER_ROOM, ENTER_MESSAGE, ENTER_NAME = range(4)
 
 load_dotenv()
@@ -15,7 +17,7 @@ try:
 except:
     print(".env is not detected in root folder")
     sys.exit(0)
-
+sys_admins = [int(admin_id) for admin_id in sys_admins]
 bot = Bot(token=TOKEN)
 
 logging.basicConfig(
@@ -87,24 +89,38 @@ def send_to_sys_admins(bot: Bot, message: str):
             print("Cant send message to sys_admin id:" + str(admin_id))
 
 
+user_chat_handler = ConversationHandler(
+    entry_points=[CommandHandler('start', start)],
+    states={
+        SELECTING_ADDRESS: [
+            MessageHandler(Filters.regex('^(Мелик-Карамова 4/1|Рабочая 43|Крылова.д 41/1|50 ЛетВЛКСМ|Кукуевицкого '
+                                         '2|Дзержинского 6/1)$'), select_address)],
+        ENTER_ROOM: [MessageHandler(Filters.text & (~ Filters.command), enter_room)],
+        ENTER_MESSAGE: [MessageHandler(Filters.text & (~ Filters.command), enter_message)],
+        ENTER_NAME: [MessageHandler(Filters.text & (~ Filters.command), processing_user_request)],
+    },
+    fallbacks=[CommandHandler('cancel', cancel)]
+)
+
+
+def send_log(update, context):
+    user_id = update.message.from_user.id
+    if user_id not in sys_admins:
+        update.message.reply_text("Извините, вы не имеете доступа к этой функции")
+        return
+    txt_path = get_txt_requests()
+    bot.sendDocument(caption="По моей информации, это актуальная база", chat_id=user_id,  document=open(txt_path, 'rb'))
+    os.remove(txt_path)
+
+
+admin_get_TXT = CommandHandler('log', send_log)
+
 def main():
     updater = Updater(token=TOKEN, use_context=True)
     dispatcher = updater.dispatcher
 
-    user_chat_handler = ConversationHandler(
-        entry_points=[CommandHandler('start', start)],
-        states={
-            SELECTING_ADDRESS: [
-                MessageHandler(Filters.regex('^(Мелик-Карамова 4/1|Рабочая 43|Крылова.д 41/1|50 ЛетВЛКСМ|Кукуевицкого '
-                                             '2|Дзержинского 6/1)$'), select_address)],
-            ENTER_ROOM: [MessageHandler(Filters.text & (~ Filters.command), enter_room)],
-            ENTER_MESSAGE: [MessageHandler(Filters.text & (~ Filters.command), enter_message)],
-            ENTER_NAME: [MessageHandler(Filters.text & (~ Filters.command), processing_user_request)],
-        },
-        fallbacks=[CommandHandler('cancel', cancel)]
-    )
-    # Создаем обработчики стадий диалога
     dispatcher.add_handler(user_chat_handler)
+    dispatcher.add_handler(admin_get_TXT)
 
     # Запускаем бота
     updater.start_polling()
