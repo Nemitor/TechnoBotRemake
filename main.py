@@ -2,26 +2,29 @@ import logging
 import os
 import sys
 import time
+from datetime import datetime
 
 from dotenv import load_dotenv
 from telegram import Bot, ReplyKeyboardMarkup, Update, ReplyKeyboardRemove
 from telegram.ext import Updater, CallbackContext, ConversationHandler, CommandHandler, MessageHandler, Filters
 
 from dictionary import address
-from sql_data import get_txt_requests, insert_in_db
+from sql_data import get_txt_requests, insert_in_db, get_active_status
 
 SELECTING_ADDRESS, ENTER_ROOM, ENTER_MESSAGE, ENTER_NAME = range(4)
 
 try:
     load_dotenv()
     TOKEN = os.getenv("TOKEN")
-    sys_admins = os.getenv("sys_admins").split(',')
+    sys_admins = os.getenv("SYS_ADMINS").split(',')
 except:
     print(".env is not detected in root folder")
     sys.exit(0)
 
 sys_admins = [int(admin_id) for admin_id in sys_admins]
 bot = Bot(token=TOKEN)
+address_keyboard = [["Мелик-Карамова 4/1", "Рабочая 43", "Крылова.д 41/1"],
+                    ["50 ЛетВЛКСМ", "Кукуевицкого 2", "Дзержинского 6/1"]]
 
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
@@ -29,12 +32,11 @@ logging.basicConfig(
 
 def start(update: Update, context: CallbackContext):
     context.user_data['telegram_id'] = update.message.from_user.id
-    reply_keyboard = [["Мелик-Карамова 4/1", "Рабочая 43", "Крылова.д 41/1"],
-                      ["50 ЛетВЛКСМ", "Кукуевицкого 2", "Дзержинского 6/1"]]
+
     update.message.reply_text(
         "Привет, выберите адрес:",
         reply_markup=ReplyKeyboardMarkup(
-            reply_keyboard, one_time_keyboard=True),
+            address_keyboard, one_time_keyboard=True),
     )
 
     return SELECTING_ADDRESS
@@ -114,6 +116,40 @@ def send_log(update, context):
     os.remove(txt_path)
 
 
+def admin_start_status(update: Update, context: CallbackContext):
+    user_id = update.message.from_user.id
+    if user_id not in sys_admins:
+        update.message.reply_text("Извините, вы не имеете доступа к этой функции")
+        return ConversationHandler.END
+    reply_keyboard = [["Мелик-Карамова 4/1", "Рабочая 43", "Крылова.д 41/1"],
+                      ["50 ЛетВЛКСМ", "Кукуевицкого 2", "Дзержинского 6/1"]]
+    update.message.reply_text(
+        "По какому адресу хотите узнать активные запросы?",
+        reply_markup=ReplyKeyboardMarkup(
+            reply_keyboard, one_time_keyboard=True),
+    )
+    return SELECTING_ADDRESS
+
+
+def send_active_status(update: Update, context: CallbackContext):
+    build_id = update.message.text
+    req = get_active_status(found_key(address,build_id))
+    for row in req:
+        current_datetime = datetime.fromtimestamp(row[5])
+        formatted_datetime = current_datetime.strftime('%Y-%m-%d %H:%M')
+        update.message.reply_text(f"Активные заявки по адресу: {build_id}")
+        result_str = '\n'.join([
+            f'ID: {row[0]}\n'
+            f'Имя учителя: {row[1]},\n'
+            f'По адресу: {address[row[2]]}\n'
+            f'Кабинет: {row[3]}\n'
+            f'Время запроса: {formatted_datetime}\n'
+            f'Message: {row[4]}'
+        ])
+        update.message.reply_text(result_str)
+    return ConversationHandler.END
+
+
 user_chat_handler = ConversationHandler(
     entry_points=[CommandHandler('start', start)],
     states={
@@ -128,10 +164,10 @@ user_chat_handler = ConversationHandler(
 )
 
 admin_get_active_status = ConversationHandler(
-    entry_points=[CommandHandler('start', start)],
+    entry_points=[CommandHandler('status', admin_start_status)],
     states={SELECTING_ADDRESS: [
         MessageHandler(Filters.regex('^(Мелик-Карамова 4/1|Рабочая 43|Крылова.д 41/1|50 ЛетВЛКСМ|Кукуевицкого '
-                                     '2|Дзержинского 6/1)$'), )],
+                                     '2|Дзержинского 6/1)$'), send_active_status)],
     },
     fallbacks=[CommandHandler('cancel', cancel)]
 )
@@ -145,6 +181,7 @@ def main():
 
     dispatcher.add_handler(user_chat_handler)
     dispatcher.add_handler(admin_get_TXT)
+    dispatcher.add_handler(admin_get_active_status)
 
     # Запускаем бота
     updater.start_polling()

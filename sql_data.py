@@ -57,3 +57,19 @@ def get_txt_requests() -> str:
 
     file_path = os.path.realpath("req.txt")
     return file_path
+
+
+def get_active_status(id):
+    query = db.select(requests).where((requests.c.address == id) & (requests.c.status == True))
+    result = connection.execute(query)
+    rows = result.fetchall()
+    return rows
+
+
+def main():
+
+    print(get_active_status(1))
+
+
+if __name__ == '__main__':
+    main()
