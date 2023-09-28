@@ -1,22 +1,25 @@
 import logging
 import os
 import sys
+import time
 
 from dotenv import load_dotenv
 from telegram import Bot, ReplyKeyboardMarkup, Update, ReplyKeyboardRemove
 from telegram.ext import Updater, CallbackContext, ConversationHandler, CommandHandler, MessageHandler, Filters
 
-from sql_data import get_txt_requests
+from dictionary import address
+from sql_data import get_txt_requests, insert_in_db
 
 SELECTING_ADDRESS, ENTER_ROOM, ENTER_MESSAGE, ENTER_NAME = range(4)
 
-load_dotenv()
 try:
+    load_dotenv()
     TOKEN = os.getenv("TOKEN")
     sys_admins = os.getenv("sys_admins").split(',')
 except:
     print(".env is not detected in root folder")
     sys.exit(0)
+
 sys_admins = [int(admin_id) for admin_id in sys_admins]
 bot = Bot(token=TOKEN)
 
@@ -62,6 +65,15 @@ def enter_message(update, context):
     return ENTER_NAME
 
 
+def found_key(dictionary, search_key) -> int:
+    founded_key = None
+    for key, value in dictionary.items():
+        if value == search_key:
+            founded_key = key
+            break
+    return founded_key
+
+
 def processing_user_request(update, context):
     update.message.reply_text("Спасибо! Ваша информация принята.")
 
@@ -72,6 +84,9 @@ def processing_user_request(update, context):
                    "Сообщение: " + context.user_data['message']
 
     send_to_sys_admins(bot, last_message)
+
+    insert_in_db(context.user_data['name'], found_key(address, context.user_data['address']), context.user_data['room'],
+                 context.user_data['message'], int(time.time()), update.message.from_user.id, True)
     return ConversationHandler.END
 
 
@@ -89,6 +104,16 @@ def send_to_sys_admins(bot: Bot, message: str):
             print("Cant send message to sys_admin id:" + str(admin_id))
 
 
+def send_log(update, context):
+    user_id = update.message.from_user.id
+    if user_id not in sys_admins:
+        update.message.reply_text("Извините, вы не имеете доступа к этой функции")
+        return
+    txt_path = get_txt_requests()
+    bot.sendDocument(caption="По моей информации, это актуальная база", chat_id=user_id, document=open(txt_path, 'rb'))
+    os.remove(txt_path)
+
+
 user_chat_handler = ConversationHandler(
     entry_points=[CommandHandler('start', start)],
     states={
@@ -102,18 +127,17 @@ user_chat_handler = ConversationHandler(
     fallbacks=[CommandHandler('cancel', cancel)]
 )
 
-
-def send_log(update, context):
-    user_id = update.message.from_user.id
-    if user_id not in sys_admins:
-        update.message.reply_text("Извините, вы не имеете доступа к этой функции")
-        return
-    txt_path = get_txt_requests()
-    bot.sendDocument(caption="По моей информации, это актуальная база", chat_id=user_id,  document=open(txt_path, 'rb'))
-    os.remove(txt_path)
-
+admin_get_active_status = ConversationHandler(
+    entry_points=[CommandHandler('start', start)],
+    states={SELECTING_ADDRESS: [
+        MessageHandler(Filters.regex('^(Мелик-Карамова 4/1|Рабочая 43|Крылова.д 41/1|50 ЛетВЛКСМ|Кукуевицкого '
+                                     '2|Дзержинского 6/1)$'), )],
+    },
+    fallbacks=[CommandHandler('cancel', cancel)]
+)
 
 admin_get_TXT = CommandHandler('log', send_log)
+
 
 def main():
     updater = Updater(token=TOKEN, use_context=True)
