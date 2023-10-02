@@ -4,6 +4,7 @@ from datetime import datetime
 import sqlalchemy as db
 
 from dictionary import address, status
+from errors import EmptyBase, IdNotExsist
 
 engine = db.create_engine('sqlite:///repair_requests.db')
 connection = engine.connect()
@@ -51,6 +52,9 @@ def get_txt_requests() -> str:
 
     output = '\n'.join(output_lines)
 
+    if not output_lines:
+        raise EmptyBase
+
     req_txt = open("req.txt", "w+")
     req_txt.write(output)
     req_txt.close()
@@ -60,15 +64,31 @@ def get_txt_requests() -> str:
 
 
 def get_active_status(id):
-    query = db.select(requests).where((requests.c.address == id) & (requests.c.status == True))
+    if id == 0:
+        query = db.select(requests).where(requests.c.status == True)
+    else:
+        query = db.select(requests).where((requests.c.address == id) & (requests.c.status == True))
+
     result = connection.execute(query)
     rows = result.fetchall()
     return rows
 
 
+def change_status(req_id: int) -> int:
+    select_query = db.select(requests).where(requests.c.request_id == req_id)
+    result = connection.execute(select_query).fetchone()
+
+    if result is None:
+        raise IdNotExsist
+
+    update_query = db.update(requests).where(requests.c.request_id == req_id).values(status=False)
+    connection.execute(update_query)
+    connection.commit()
+    return result[6]
+
 def main():
 
-    print(get_active_status(1))
+    change_status(3)
 
 
 if __name__ == '__main__':

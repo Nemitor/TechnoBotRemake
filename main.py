@@ -6,10 +6,12 @@ from datetime import datetime
 
 from dotenv import load_dotenv
 from telegram import Bot, ReplyKeyboardMarkup, Update, ReplyKeyboardRemove
+from telegram.error import BadRequest
 from telegram.ext import Updater, CallbackContext, ConversationHandler, CommandHandler, MessageHandler, Filters
 
 from dictionary import address
-from sql_data import get_txt_requests, insert_in_db, get_active_status
+from errors import EmptyBase, IdNotExsist
+from sql_data import get_txt_requests, insert_in_db, get_active_status, change_status
 
 SELECTING_ADDRESS, ENTER_ROOM, ENTER_MESSAGE, ENTER_NAME = range(4)
 
@@ -17,7 +19,7 @@ try:
     load_dotenv()
     TOKEN = os.getenv("TOKEN")
     sys_admins = os.getenv("SYS_ADMINS").split(',')
-except:
+except AttributeError:
     print(".env is not detected in root folder")
     sys.exit(0)
 
@@ -85,7 +87,7 @@ def processing_user_request(update, context):
                    "В кабинете: " + context.user_data['room'] + "\n" + \
                    "Сообщение: " + context.user_data['message']
 
-    send_to_sys_admins(bot, last_message)
+    send_to_sys_admins(last_message)
 
     insert_in_db(context.user_data['name'], found_key(address, context.user_data['address']), context.user_data['room'],
                  context.user_data['message'], int(time.time()), update.message.from_user.id, True)
@@ -98,22 +100,26 @@ def cancel(update, context):
     return ConversationHandler.END
 
 
-def send_to_sys_admins(bot: Bot, message: str):
+def send_to_sys_admins(message: str):
     for admin_id in sys_admins:
         try:
             bot.sendMessage(text=message, chat_id=admin_id)
-        except:
+        except BadRequest:
             print("Cant send message to sys_admin id:" + str(admin_id))
 
 
-def send_log(update, context):
+def send_log(update: Update, context: CallbackContext):
     user_id = update.message.from_user.id
     if user_id not in sys_admins:
         update.message.reply_text("Извините, вы не имеете доступа к этой функции")
         return
-    txt_path = get_txt_requests()
-    bot.sendDocument(caption="По моей информации, это актуальная база", chat_id=user_id, document=open(txt_path, 'rb'))
-    os.remove(txt_path)
+    try:
+        txt_path = get_txt_requests()
+        bot.sendDocument(caption="По моей информации, это актуальная база", chat_id=user_id,
+                         document=open(txt_path, 'rb'))
+        os.remove(txt_path)
+    except EmptyBase:
+        update.message.reply_text("На данный момент, база пустая", reply_markup=ReplyKeyboardRemove())
 
 
 def admin_start_status(update: Update, context: CallbackContext):
@@ -121,23 +127,31 @@ def admin_start_status(update: Update, context: CallbackContext):
     if user_id not in sys_admins:
         update.message.reply_text("Извините, вы не имеете доступа к этой функции")
         return ConversationHandler.END
-    reply_keyboard = [["Мелик-Карамова 4/1", "Рабочая 43", "Крылова.д 41/1"],
-                      ["50 ЛетВЛКСМ", "Кукуевицкого 2", "Дзержинского 6/1"]]
+    address_keyboard.append(["Все адреса"])
     update.message.reply_text(
         "По какому адресу хотите узнать активные запросы?",
         reply_markup=ReplyKeyboardMarkup(
-            reply_keyboard, one_time_keyboard=True),
+            address_keyboard, one_time_keyboard=True),
     )
+    del address_keyboard[2]
     return SELECTING_ADDRESS
 
 
 def send_active_status(update: Update, context: CallbackContext):
     build_id = update.message.text
-    req = get_active_status(found_key(address,build_id))
+    if build_id == "Все адреса":
+        req = get_active_status(0)
+    else:
+        req = get_active_status(found_key(address, build_id))
+
+    if not req:
+        update.message.reply_text(f"Активных заявок по адресу: {build_id}\nНе обнаружено.")
+        return ConversationHandler.END
+    update.message.reply_text(f"Активные заявки по адресу: {build_id}")
     for row in req:
         current_datetime = datetime.fromtimestamp(row[5])
         formatted_datetime = current_datetime.strftime('%Y-%m-%d %H:%M')
-        update.message.reply_text(f"Активные заявки по адресу: {build_id}")
+
         result_str = '\n'.join([
             f'ID: {row[0]}\n'
             f'Имя учителя: {row[1]},\n'
@@ -147,6 +161,23 @@ def send_active_status(update: Update, context: CallbackContext):
             f'Message: {row[4]}'
         ])
         update.message.reply_text(result_str)
+    return ConversationHandler.END
+
+
+def send_active_status_apply(update: Update, context: CallbackContext):
+    send_active_status(update,context)
+    update.message.reply_text("Для изменения статуса напишите ID:")
+    return ENTER_ROOM
+
+
+def apply_request(update: Update, context: CallbackContext):
+    request_id = update.message.text
+    try:
+        user_tg_id = change_status(int(request_id))
+        bot.sendMessage(text="Ваша заявка выполнена", chat_id=user_tg_id)
+    except IdNotExsist:
+        pass
+
     return ConversationHandler.END
 
 
@@ -167,12 +198,22 @@ admin_get_active_status = ConversationHandler(
     entry_points=[CommandHandler('status', admin_start_status)],
     states={SELECTING_ADDRESS: [
         MessageHandler(Filters.regex('^(Мелик-Карамова 4/1|Рабочая 43|Крылова.д 41/1|50 ЛетВЛКСМ|Кукуевицкого '
-                                     '2|Дзержинского 6/1)$'), send_active_status)],
+                                     '2|Дзержинского 6/1|Все адреса)$'), send_active_status)],
     },
     fallbacks=[CommandHandler('cancel', cancel)]
 )
 
 admin_get_TXT = CommandHandler('log', send_log)
+
+admin_apply_request = ConversationHandler(
+    entry_points=[CommandHandler('apply', admin_start_status)],
+    states={SELECTING_ADDRESS: [
+        MessageHandler(Filters.regex('^(Мелик-Карамова 4/1|Рабочая 43|Крылова.д 41/1|50 ЛетВЛКСМ|Кукуевицкого '
+                                     '2|Дзержинского 6/1|Все адреса)$'), send_active_status_apply)],
+        ENTER_ROOM: [MessageHandler(Filters.text & (~ Filters.command), apply_request)]
+    },
+    fallbacks=[CommandHandler('cancel', cancel)]
+)
 
 
 def main():
@@ -182,6 +223,7 @@ def main():
     dispatcher.add_handler(user_chat_handler)
     dispatcher.add_handler(admin_get_TXT)
     dispatcher.add_handler(admin_get_active_status)
+    dispatcher.add_handler(admin_apply_request)
 
     # Запускаем бота
     updater.start_polling()
