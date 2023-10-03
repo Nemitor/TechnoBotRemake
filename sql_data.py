@@ -4,7 +4,7 @@ from datetime import datetime
 import sqlalchemy as db
 
 from dictionary import address, status
-from errors import EmptyBase, IdNotExsist
+from errors import EmptyBase, IdNotExists
 
 engine = db.create_engine('sqlite:///repair_requests.db')
 connection = engine.connect()
@@ -74,17 +74,17 @@ def get_active_status(id):
     return rows
 
 
-def change_status(req_id: int) -> int:
+def change_status(req_id: int):
     select_query = db.select(requests).where(requests.c.request_id == req_id)
     result = connection.execute(select_query).fetchone()
 
     if result is None:
-        raise IdNotExsist
+        raise IdNotExists
 
     update_query = db.update(requests).where(requests.c.request_id == req_id).values(status=False)
     connection.execute(update_query)
     connection.commit()
-    return result[6]
+    return result
 
 def main():
 

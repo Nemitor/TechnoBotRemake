@@ -6,11 +6,11 @@ from datetime import datetime
 
 from dotenv import load_dotenv
 from telegram import Bot, ReplyKeyboardMarkup, Update, ReplyKeyboardRemove
-from telegram.error import BadRequest
+from telegram.error import BadRequest, Unauthorized
 from telegram.ext import Updater, CallbackContext, ConversationHandler, CommandHandler, MessageHandler, Filters
 
 from dictionary import address
-from errors import EmptyBase, IdNotExsist
+from errors import EmptyBase, IdNotExists
 from sql_data import get_txt_requests, insert_in_db, get_active_status, change_status
 
 SELECTING_ADDRESS, ENTER_ROOM, ENTER_MESSAGE, ENTER_NAME = range(4)
@@ -104,7 +104,7 @@ def send_to_sys_admins(message: str):
     for admin_id in sys_admins:
         try:
             bot.sendMessage(text=message, chat_id=admin_id)
-        except BadRequest:
+        except (BadRequest, Unauthorized):
             print("Cant send message to sys_admin id:" + str(admin_id))
 
 
@@ -165,7 +165,7 @@ def send_active_status(update: Update, context: CallbackContext):
 
 
 def send_active_status_apply(update: Update, context: CallbackContext):
-    send_active_status(update,context)
+    send_active_status(update, context)
     update.message.reply_text("Для изменения статуса напишите ID:")
     return ENTER_ROOM
 
@@ -173,9 +173,17 @@ def send_active_status_apply(update: Update, context: CallbackContext):
 def apply_request(update: Update, context: CallbackContext):
     request_id = update.message.text
     try:
-        user_tg_id = change_status(int(request_id))
-        bot.sendMessage(text="Ваша заявка выполнена", chat_id=user_tg_id)
-    except IdNotExsist:
+        status = change_status(int(request_id))
+        user_tg_id = status[6]
+        current_datetime = datetime.fromtimestamp(status[5])
+        formatted_datetime = current_datetime.strftime('%Y-%m-%d %H:%M')
+        try:
+            bot.sendMessage(text=f"Ваша заявка от:{formatted_datetime} выполнена", chat_id=user_tg_id)
+        except (BadRequest, Unauthorized):
+            print(f"Cant send massage to user {user_tg_id}")
+        update.message.reply_text(f"ID: {request_id}, отмечен как выполненный\n"
+                                  f"Пользователь {user_tg_id}, получил сообщение о выпаленной работе")
+    except IdNotExists:
         pass
 
     return ConversationHandler.END
@@ -225,7 +233,6 @@ def main():
     dispatcher.add_handler(admin_get_active_status)
     dispatcher.add_handler(admin_apply_request)
 
-    # Запускаем бота
     updater.start_polling()
     updater.idle()
 

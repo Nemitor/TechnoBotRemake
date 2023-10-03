@@ -2,5 +2,5 @@ class EmptyBase(Exception):
     pass
 
 
-class IdNotExsist(Exception):
+class IdNotExists(Exception):
     pass
