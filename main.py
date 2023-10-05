@@ -2,7 +2,6 @@ import logging
 import os
 import sys
 import time
-from datetime import datetime
 
 from dotenv import load_dotenv
 from telegram import Bot, ReplyKeyboardMarkup, Update, ReplyKeyboardRemove
@@ -11,7 +10,8 @@ from telegram.ext import Updater, CallbackContext, ConversationHandler, CommandH
 
 from dictionary import address
 from errors import EmptyBase, IdNotExists
-from sql_data import get_txt_requests, insert_in_db, get_active_status, change_status
+from modules.utils import convert_time_to_gmt5, create_txt, formatting_request
+from database import get_all_requests, insert_in_db, get_active_status, change_status
 
 SELECTING_ADDRESS, ENTER_ROOM, ENTER_MESSAGE, ENTER_NAME = range(4)
 
@@ -36,7 +36,7 @@ def start(update: Update, context: CallbackContext):
     context.user_data['telegram_id'] = update.message.from_user.id
 
     update.message.reply_text(
-        "Привет, выберите адрес:",
+        "Для отправки запроса в техническую службу выберите адрес:",
         reply_markup=ReplyKeyboardMarkup(
             address_keyboard, one_time_keyboard=True),
     )
@@ -114,7 +114,7 @@ def send_log(update: Update, context: CallbackContext):
         update.message.reply_text("Извините, вы не имеете доступа к этой функции")
         return
     try:
-        txt_path = get_txt_requests()
+        txt_path = create_txt(formatting_request(get_all_requests()))
         bot.sendDocument(caption="По моей информации, это актуальная база", chat_id=user_id,
                          document=open(txt_path, 'rb'))
         os.remove(txt_path)
@@ -149,8 +149,7 @@ def send_active_status(update: Update, context: CallbackContext):
         return ConversationHandler.END
     update.message.reply_text(f"Активные заявки по адресу: {build_id}")
     for row in req:
-        current_datetime = datetime.fromtimestamp(row[5])
-        formatted_datetime = current_datetime.strftime('%Y-%m-%d %H:%M')
+        formatted_datetime = convert_time_to_gmt5(row[5])
 
         result_str = '\n'.join([
             f'ID: {row[0]}\n'
@@ -175,10 +174,9 @@ def apply_request(update: Update, context: CallbackContext):
     try:
         status = change_status(int(request_id))
         user_tg_id = status[6]
-        current_datetime = datetime.fromtimestamp(status[5])
-        formatted_datetime = current_datetime.strftime('%Y-%m-%d %H:%M')
+        formatted_datetime = convert_time_to_gmt5(status[5])
         try:
-            bot.sendMessage(text=f"Ваша заявка от:{formatted_datetime} выполнена", chat_id=user_tg_id)
+            bot.sendMessage(text=f"Ваша заявка от: {formatted_datetime} выполнена", chat_id=user_tg_id)
         except (BadRequest, Unauthorized):
             print(f"Cant send massage to user {user_tg_id}")
         update.message.reply_text(f"ID: {request_id}, отмечен как выполненный\n"

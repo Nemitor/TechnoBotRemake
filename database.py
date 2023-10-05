@@ -1,10 +1,6 @@
-import os
-from datetime import datetime
-
 import sqlalchemy as db
 
-from dictionary import address, status
-from errors import EmptyBase, IdNotExists
+from errors import IdNotExists, EmptyBase
 
 engine = db.create_engine('sqlite:///repair_requests.db')
 connection = engine.connect()
@@ -21,7 +17,6 @@ requests = db.Table('requests', metadata,
 
 metadata.create_all(engine)
 
-
 def insert_in_db(name: str, address: int, cabinet: str, message: str, request_time: int, telegram_id: int,
                  status: bool):
     query = requests.insert().values(
@@ -37,30 +32,14 @@ def insert_in_db(name: str, address: int, cabinet: str, message: str, request_ti
     connection.commit()
 
 
-def get_txt_requests() -> str:
+def get_all_requests():
     select_all_query = db.select(requests)
     select_all_result = connection.execute(select_all_query)
 
-    output_lines = []
-
-    for row in select_all_result:
-        current_datetime = datetime.fromtimestamp(row[5])
-        formatted_datetime = current_datetime.strftime('%Y-%m-%d %H:%M')
-        formatted_row = (f"Ключ: {row[0]}, Имя педагога: {row[1]}, Адрес: {address[row[2]]}, Кабинет: {row[3]}, "
-                         f"Сообщение: {row[4]}, Время: {formatted_datetime}, TG_ID: {row[6]}, Статус: {status[row[7]]}")
-        output_lines.append(formatted_row)
-
-    output = '\n'.join(output_lines)
-
-    if not output_lines:
+    if not select_all_result:
         raise EmptyBase
 
-    req_txt = open("req.txt", "w+")
-    req_txt.write(output)
-    req_txt.close()
-
-    file_path = os.path.realpath("req.txt")
-    return file_path
+    return select_all_result
 
 
 def get_active_status(id):
@@ -85,11 +64,3 @@ def change_status(req_id: int):
     connection.execute(update_query)
     connection.commit()
     return result
-
-def main():
-
-    change_status(3)
-
-
-if __name__ == '__main__':
-    main()

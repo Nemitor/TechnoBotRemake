@@ -4,3 +4,7 @@ class EmptyBase(Exception):
 
 class IdNotExists(Exception):
     pass
+
+
+class ImportEmpty(Exception):
+    pass
