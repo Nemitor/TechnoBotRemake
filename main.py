@@ -1,13 +1,14 @@
-import logging
 import os
 import sys
 import time
+
 
 from dotenv import load_dotenv
 from telegram import Bot, ReplyKeyboardMarkup, Update, ReplyKeyboardRemove
 from telegram.error import BadRequest, Unauthorized
 from telegram.ext import Updater, CallbackContext, ConversationHandler, CommandHandler, MessageHandler, Filters
 
+import loggerTech
 from dictionary import address
 from errors import EmptyBase, IdNotExists
 from modules.utils import convert_time_to_gmt5, create_txt, formatting_request
@@ -15,21 +16,20 @@ from database import get_all_requests, insert_in_db, get_active_status, change_s
 
 SELECTING_ADDRESS, ENTER_ROOM, ENTER_MESSAGE, ENTER_NAME = range(4)
 
+logger = loggerTech.logger
+
 try:
     load_dotenv()
     TOKEN = os.getenv("TOKEN")
     sys_admins = os.getenv("SYS_ADMINS").split(',')
 except AttributeError:
-    print(".env is not detected in root folder")
+    logger.error(".env")
     sys.exit(0)
 
 sys_admins = [int(admin_id) for admin_id in sys_admins]
 bot = Bot(token=TOKEN)
 address_keyboard = [["Мелик-Карамова 4/1", "Рабочая 43", "Крылова.д 41/1"],
                     ["50 ЛетВЛКСМ", "Кукуевицкого 2", "Дзержинского 6/1"]]
-
-logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 
 
 def start(update: Update, context: CallbackContext):
@@ -105,7 +105,7 @@ def send_to_sys_admins(message: str):
         try:
             bot.sendMessage(text=message, chat_id=admin_id)
         except (BadRequest, Unauthorized):
-            print("Cant send message to sys_admin id:" + str(admin_id))
+            logger.error("Cant send message to sys_admin id:" + str(admin_id))
 
 
 def send_log(update: Update, context: CallbackContext):
@@ -178,7 +178,7 @@ def apply_request(update: Update, context: CallbackContext):
         try:
             bot.sendMessage(text=f"Ваша заявка от: {formatted_datetime} выполнена", chat_id=user_tg_id)
         except (BadRequest, Unauthorized):
-            print(f"Cant send massage to user {user_tg_id}")
+            logger.error(f"Cant send massage to user {user_tg_id}")
         update.message.reply_text(f"ID: {request_id}, отмечен как выполненный\n"
                                   f"Пользователь {user_tg_id}, получил сообщение о выпаленной работе")
     except IdNotExists:
