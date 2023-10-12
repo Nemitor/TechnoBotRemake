@@ -5,7 +5,7 @@ import pytz
 
 from dictionary import address, status
 
-from errors import EmptyBase, ImportEmpty
+from errors import ImportEmpty
 
 
 def convert_time_to_gmt5(timestamp: int) -> str:

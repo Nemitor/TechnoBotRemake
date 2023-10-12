@@ -1,7 +1,7 @@
 import os
+import re
 import sys
 import time
-
 
 from dotenv import load_dotenv
 from telegram import Bot, ReplyKeyboardMarkup, Update, ReplyKeyboardRemove
@@ -9,10 +9,10 @@ from telegram.error import BadRequest, Unauthorized
 from telegram.ext import Updater, CallbackContext, ConversationHandler, CommandHandler, MessageHandler, Filters
 
 import loggerTech
-from dictionary import address
-from errors import EmptyBase, IdNotExists
-from modules.utils import convert_time_to_gmt5, create_txt, formatting_request
 from database import get_all_requests, insert_in_db, get_active_status, change_status
+from dictionary import address
+from errors import EmptyBase, IdNotExists, ImportEmpty
+from modules.utils import convert_time_to_gmt5, create_txt, formatting_request
 
 SELECTING_ADDRESS, ENTER_ROOM, ENTER_MESSAGE, ENTER_NAME = range(4)
 
@@ -28,15 +28,20 @@ except AttributeError:
 
 sys_admins = [int(admin_id) for admin_id in sys_admins]
 bot = Bot(token=TOKEN)
-address_keyboard = [["Мелик-Карамова 4/1", "Рабочая 43", "Крылова.д 41/1"],
-                    ["50 ЛетВЛКСМ", "Кукуевицкого 2", "Дзержинского 6/1"]]
+
+
+address_keyboard = [[address[0], address[1], address[2]],
+                    [address[3], address[4], address[5]]]
+
+regex_pattern = '|'.join(re.escape(building) for building in address)
+regex_pattern = f'^({regex_pattern})$'
 
 
 def start(update: Update, context: CallbackContext):
     context.user_data['telegram_id'] = update.message.from_user.id
 
     update.message.reply_text(
-        "Для отправки запроса в техническую службу выберите адрес:",
+        "Здравствуйте! Для отправки запроса в техническую службу выберите адрес:",
         reply_markup=ReplyKeyboardMarkup(
             address_keyboard, one_time_keyboard=True),
     )
@@ -69,15 +74,6 @@ def enter_message(update, context):
     return ENTER_NAME
 
 
-def found_key(dictionary, search_key) -> int:
-    founded_key = None
-    for key, value in dictionary.items():
-        if value == search_key:
-            founded_key = key
-            break
-    return founded_key
-
-
 def processing_user_request(update, context):
     update.message.reply_text("Спасибо! Ваша информация принята.")
 
@@ -89,7 +85,7 @@ def processing_user_request(update, context):
 
     send_to_sys_admins(last_message)
 
-    insert_in_db(context.user_data['name'], found_key(address, context.user_data['address']), context.user_data['room'],
+    insert_in_db(context.user_data['name'], address.index(context.user_data['address']), context.user_data['room'],
                  context.user_data['message'], int(time.time()), update.message.from_user.id, True)
     return ConversationHandler.END
 
@@ -118,7 +114,7 @@ def send_log(update: Update, context: CallbackContext):
         bot.sendDocument(caption="По моей информации, это актуальная база", chat_id=user_id,
                          document=open(txt_path, 'rb'))
         os.remove(txt_path)
-    except EmptyBase:
+    except (EmptyBase, ImportEmpty):
         update.message.reply_text("На данный момент, база пустая", reply_markup=ReplyKeyboardRemove())
 
 
@@ -142,7 +138,7 @@ def send_active_status(update: Update, context: CallbackContext):
     if build_id == "Все адреса":
         req = get_active_status(0)
     else:
-        req = get_active_status(found_key(address, build_id))
+        req = get_active_status(address.index(build_id))
 
     if not req:
         update.message.reply_text(f"Активных заявок по адресу: {build_id}\nНе обнаружено.")
@@ -180,7 +176,7 @@ def apply_request(update: Update, context: CallbackContext):
         except (BadRequest, Unauthorized):
             logger.error(f"Cant send massage to user {user_tg_id}")
         update.message.reply_text(f"ID: {request_id}, отмечен как выполненный\n"
-                                  f"Пользователь {user_tg_id}, получил сообщение о выпаленной работе")
+                                  f"Пользователь {user_tg_id}, получил сообщение о выполненной работе")
     except IdNotExists:
         pass
 
@@ -191,8 +187,8 @@ user_chat_handler = ConversationHandler(
     entry_points=[CommandHandler('start', start)],
     states={
         SELECTING_ADDRESS: [
-            MessageHandler(Filters.regex('^(Мелик-Карамова 4/1|Рабочая 43|Крылова.д 41/1|50 ЛетВЛКСМ|Кукуевицкого '
-                                         '2|Дзержинского 6/1)$'), select_address)],
+            MessageHandler(
+                Filters.regex(regex_pattern), select_address)],
         ENTER_ROOM: [MessageHandler(Filters.text & (~ Filters.command), enter_room)],
         ENTER_MESSAGE: [MessageHandler(Filters.text & (~ Filters.command), enter_message)],
         ENTER_NAME: [MessageHandler(Filters.text & (~ Filters.command), processing_user_request)],
@@ -203,8 +199,7 @@ user_chat_handler = ConversationHandler(
 admin_get_active_status = ConversationHandler(
     entry_points=[CommandHandler('status', admin_start_status)],
     states={SELECTING_ADDRESS: [
-        MessageHandler(Filters.regex('^(Мелик-Карамова 4/1|Рабочая 43|Крылова.д 41/1|50 ЛетВЛКСМ|Кукуевицкого '
-                                     '2|Дзержинского 6/1|Все адреса)$'), send_active_status)],
+        MessageHandler(Filters.regex(f'{regex_pattern}|Все адреса'), send_active_status)],
     },
     fallbacks=[CommandHandler('cancel', cancel)]
 )
@@ -214,8 +209,7 @@ admin_get_TXT = CommandHandler('log', send_log)
 admin_apply_request = ConversationHandler(
     entry_points=[CommandHandler('apply', admin_start_status)],
     states={SELECTING_ADDRESS: [
-        MessageHandler(Filters.regex('^(Мелик-Карамова 4/1|Рабочая 43|Крылова.д 41/1|50 ЛетВЛКСМ|Кукуевицкого '
-                                     '2|Дзержинского 6/1|Все адреса)$'), send_active_status_apply)],
+        MessageHandler(Filters.regex(f'{regex_pattern}|Все адреса'), send_active_status_apply)],
         ENTER_ROOM: [MessageHandler(Filters.text & (~ Filters.command), apply_request)]
     },
     fallbacks=[CommandHandler('cancel', cancel)]

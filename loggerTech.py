@@ -10,7 +10,6 @@ current_date = datetime.date.today()
 
 formatted_date = current_date.strftime("%d.%m.%Y")
 
-
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
