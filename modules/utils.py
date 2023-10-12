@@ -9,6 +9,16 @@ from errors import ImportEmpty
 
 
 def convert_time_to_gmt5(timestamp: int) -> str:
+    """
+          Covert timestamp to GMT 5
+
+          with template %d.%m.%Y %H:%M
+
+          :param timestamp: text into file
+          :type timestamp: int
+          :return: Return time in GMT 5
+          :rtype: str
+          """g
     ekb_timezone = pytz.timezone('Asia/Yekaterinburg')
     current_datetime = datetime.fromtimestamp(timestamp, tz=ekb_timezone)
     formatted_datetime = current_datetime.strftime('%d.%m.%Y %H:%M')
@@ -28,12 +38,24 @@ def formatting_request(select_all_result) -> str:
     return output
 
 
-def create_txt(into: str) -> str:
+def create_txt(into: str, filename="req.txt") -> str:
+    """
+      Create txt file
+
+      Require two params, string into, and file name
+
+      :param into: text into file
+      :type into: str
+      :param filename: Name of a file:
+      :type filename: str
+      :return: realpath of created file
+      :rtype: str
+      """
 
     if not into:
         raise ImportEmpty
 
-    req_txt = open("req.txt", "w+")
+    req_txt = open(filename, "w+")
     req_txt.write(into)
     req_txt.close()
 
