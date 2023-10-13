@@ -17,6 +17,7 @@ requests = db.Table('requests', metadata,
 
 metadata.create_all(engine)
 
+
 def insert_in_db(name: str, address: int, cabinet: str, message: str, request_time: int, telegram_id: int,
                  status: bool):
     query = requests.insert().values(
