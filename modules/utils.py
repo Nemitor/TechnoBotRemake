@@ -18,7 +18,7 @@ def convert_time_to_gmt5(timestamp: int) -> str:
           :type timestamp: int
           :return: Return time in GMT 5
           :rtype: str
-          """g
+          """
     ekb_timezone = pytz.timezone('Asia/Yekaterinburg')
     current_datetime = datetime.fromtimestamp(timestamp, tz=ekb_timezone)
     formatted_datetime = current_datetime.strftime('%d.%m.%Y %H:%M')
