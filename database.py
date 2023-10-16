@@ -1,6 +1,6 @@
 import sqlalchemy as db
 
-from errors import IdNotExists, EmptyBase
+from errors import IdNotExists, EmptyBase, StatusAlreadyFalse
 
 engine = db.create_engine('sqlite:///repair_requests.db')
 connection = engine.connect()
@@ -29,8 +29,9 @@ def insert_in_db(name: str, address: int, cabinet: str, message: str, request_ti
         telegram_id=telegram_id,
         status=status
     )
-    connection.execute(query)
+    result = connection.execute(query)
     connection.commit()
+    return result.lastrowid
 
 
 def get_all_requests():
@@ -60,6 +61,9 @@ def change_status(req_id: int):
 
     if result is None:
         raise IdNotExists
+
+    if result[7] is False:
+        raise StatusAlreadyFalse
 
     update_query = db.update(requests).where(requests.c.request_id == req_id).values(status=False)
     connection.execute(update_query)

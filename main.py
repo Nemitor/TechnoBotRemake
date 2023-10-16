@@ -12,7 +12,7 @@ from telegram.ext import CallbackContext, ConversationHandler, CommandHandler, M
 import loggerTech
 from database import get_all_requests, insert_in_db, get_active_status, change_status
 from dictionary import address
-from errors import EmptyBase, IdNotExists, ImportEmpty
+from errors import EmptyBase, IdNotExists, ImportEmpty, StatusAlreadyFalse
 from modules.utils import convert_time_to_gmt5, create_txt, formatting_request
 
 SELECTING_ADDRESS, ENTER_ROOM, ENTER_MESSAGE, ENTER_NAME = range(4)
@@ -79,15 +79,17 @@ async def processing_user_request(update, context):
     await update.message.reply_text("Спасибо! Ваша информация принята.")
 
     context.user_data['name'] = update.message.text
-    last_message = "От:  " + context.user_data['name'] + "\n" + \
+    db_id = insert_in_db(context.user_data['name'], address.index(context.user_data['address']),
+                         context.user_data['room'],
+                         context.user_data['message'], int(time.time()), update.message.from_user.id, True)
+    last_message = "ID: " + str(db_id) + "\n" + \
+                   "От: " + context.user_data['name'] + "\n" + \
                    "По адресу: " + context.user_data['address'] + "\n" + \
                    "В кабинете: " + context.user_data['room'] + "\n" + \
                    "Сообщение: " + context.user_data['message']
 
     await send_to_sys_admins(last_message)
 
-    insert_in_db(context.user_data['name'], address.index(context.user_data['address']), context.user_data['room'],
-                 context.user_data['message'], int(time.time()), update.message.from_user.id, True)
     logger.info(f"User {update.message.from_user.id}, Create the new request!")
     return ConversationHandler.END
 
@@ -164,9 +166,8 @@ async def send_active_status(update: Update, context: CallbackContext):
 
 
 async def send_active_status_apply(update: Update, context: CallbackContext):
-    await send_active_status(update, context)
     await update.message.reply_text("Для изменения статуса напишите ID:")
-    return ENTER_ROOM
+    return SELECTING_ADDRESS
 
 
 async def apply_request(update: Update, context: CallbackContext):
@@ -179,11 +180,15 @@ async def apply_request(update: Update, context: CallbackContext):
             await bot.sendMessage(text=f"Ваша заявка от: {formatted_datetime} выполнена", chat_id=user_tg_id)
         except BadRequest:
             logger.error(f"Cant send massage to user {user_tg_id}")
+
         await update.message.reply_text(f"ID: {request_id}, отмечен как выполненный\n"
                                         f"Пользователь {user_tg_id}, получил сообщение о выполненной работе")
-    except IdNotExists as e:
+    except (IdNotExists, ValueError) as e:
         await update.message.reply_text(f"ID: {request_id}. Не существует, и/или случилась непредвиденная ошибка")
         logger.warning(f"W{e} with request_id: {request_id} unreachable!")
+    except StatusAlreadyFalse as e:
+        await update.message.reply_text(f"ID: {request_id} уже отмечен как выполненный")
+        logger.warning(f"request_id: {request_id} already false!")
 
     return ConversationHandler.END
 
@@ -212,11 +217,8 @@ admin_get_active_status = ConversationHandler(
 admin_get_TXT = CommandHandler('log', send_log)
 
 admin_apply_request = ConversationHandler(
-    entry_points=[CommandHandler('apply', admin_start_status)],
-    states={SELECTING_ADDRESS: [
-        MessageHandler(filters.Regex(f'{regex_pattern}|Все адреса'), send_active_status_apply)],
-        ENTER_ROOM: [MessageHandler(filters.TEXT & (~ filters.COMMAND), apply_request)]
-    },
+    entry_points=[CommandHandler('apply', send_active_status_apply)],
+    states={SELECTING_ADDRESS: [MessageHandler(filters.TEXT & (~ filters.COMMAND), apply_request)]},
     fallbacks=[CommandHandler('cancel', cancel)]
 )
 

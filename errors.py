@@ -8,3 +8,7 @@ class IdNotExists(Exception):
 
 class ImportEmpty(Exception):
     pass
+
+
+class StatusAlreadyFalse(Exception):
+    pass
