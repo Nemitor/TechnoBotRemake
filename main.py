@@ -45,6 +45,7 @@ async def start(update: Update, context: CallbackContext):
         reply_markup=ReplyKeyboardMarkup(
             address_keyboard, one_time_keyboard=True),
     )
+    logger.info(f"User {update.message.from_user.id}, Create the new conversation!")
 
     return SELECTING_ADDRESS
 
@@ -87,6 +88,7 @@ async def processing_user_request(update, context):
 
     insert_in_db(context.user_data['name'], address.index(context.user_data['address']), context.user_data['room'],
                  context.user_data['message'], int(time.time()), update.message.from_user.id, True)
+    logger.info(f"User {update.message.from_user.id}, Create the new request!")
     return ConversationHandler.END
 
 
@@ -114,8 +116,10 @@ async def send_log(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await bot.sendDocument(caption="По моей информации, это актуальная база", chat_id=user_id,
                                document=open(txt_path, 'rb'))
         os.remove(txt_path)
+        logger.info(f"Admin: {update.message.from_user.id}. Get logs")
     except (EmptyBase, ImportEmpty):
         await update.message.reply_text("На данный момент, база пустая", reply_markup=ReplyKeyboardRemove())
+        logger.info(f"Admin: {update.message.from_user.id}. Cant take empty base")
 
 
 async def admin_start_status(update: Update, context: CallbackContext):
@@ -177,8 +181,9 @@ async def apply_request(update: Update, context: CallbackContext):
             logger.error(f"Cant send massage to user {user_tg_id}")
         await update.message.reply_text(f"ID: {request_id}, отмечен как выполненный\n"
                                         f"Пользователь {user_tg_id}, получил сообщение о выполненной работе")
-    except IdNotExists:
-        pass
+    except IdNotExists as e:
+        await update.message.reply_text(f"ID: {request_id}. Не существует, и/или случилась непредвиденная ошибка")
+        logger.warning(f"W{e} with request_id: {request_id} unreachable!")
 
     return ConversationHandler.END
 
