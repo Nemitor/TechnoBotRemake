@@ -166,6 +166,10 @@ async def send_active_status(update: Update, context: CallbackContext):
 
 
 async def send_active_status_apply(update: Update, context: CallbackContext):
+    user_id = update.message.from_user.id
+    if user_id not in sys_admins:
+        await update.message.reply_text("Извините, вы не имеете доступа к этой функции")
+        return ConversationHandler.END
     await update.message.reply_text("Для изменения статуса напишите ID:")
     return SELECTING_ADDRESS
 
